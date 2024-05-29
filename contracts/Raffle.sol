@@ -197,4 +197,8 @@ contract Raffle is VRFConsumerBaseV2 {
     function getLastTimestamp() external view returns (uint256) {
         return s_lastTimestamp;
     }
+
+    function getInterval() external view returns (uint256) {
+        return i_interval;
+    }
 }
