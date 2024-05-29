@@ -187,6 +187,73 @@ contract RaffleTest is Test {
         );
     }
 
+    /**
+     * @dev tests below use multiple players for testing
+     */
+
+    function testFulfillRandomWordsPicksWinnerResetsAndSendsMoney()
+        public
+        raffleEnteredAndTimePassed
+    {
+        uint160 numPlayers = 200;
+        address[] memory resultPlayers = _createPlayers(numPlayers);
+        address[] memory players = new address[](numPlayers + 1);
+        players[0] = PLAYER;
+        for (uint160 i = 1; i <= numPlayers; i++) {
+            players[i] = resultPlayers[i - 1];
+        }
+        // test to ensure players was setup correctly
+        assert(players[0] == PLAYER);
+        assert(players[1] == resultPlayers[0]);
+        assert(players[2] == resultPlayers[1]);
+        assert(players[numPlayers / 2] == resultPlayers[(numPlayers / 2) - 1]);
+        assert(players[numPlayers] == resultPlayers[numPlayers - 1]);
+
+        uint256 previousTimestamp = raffle.getLastTimestamp();
+        uint256 prizeShouldBe = (numPlayers + 1) * entranceFee;
+        uint256 prize = address(raffle).balance;
+
+        assert(prizeShouldBe == prize);
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+
+        address payable[] memory rafflePlayers = raffle.getPlayersArray();
+
+        for (uint i; i < numPlayers + 1; i++) {
+            assert(players[i] == rafflePlayers[i]);
+        }
+
+        // pretend to be chainlink vrf to get random number and pick winner
+        VRFCoordinatorV2Mock(vrfCoordinator).fulfillRandomWords(
+            uint256(requestId),
+            address(raffle)
+        );
+
+        uint256 lastTimestamp = raffle.getLastTimestamp();
+        // address winner = players[uint(????)];
+        address winner = raffle.getRecentWinner();
+
+        // make sure lastTimestamp was updated
+        assert(lastTimestamp > previousTimestamp);
+
+        // make sure Raffle State was updated to OPEN
+        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+
+        // players array should be reset to 0
+        assert(raffle.getLengthOfPlayers() == 0);
+
+        // make sure winner was selected
+        // assert(raffle.getRecentWinner() == winner);
+
+        // check winner recieved prize
+        uint256 winnerBalance = address(winner).balance;
+        assert(winnerBalance > prize);
+        assert(winnerBalance == prize + STARTING_BALANCE - entranceFee);
+    }
+
     function testMultiplePlayersEnterRaffleGetPlayer() public {
         uint160 numPlayers = 25;
         address[] memory players = _createPlayers(numPlayers);
