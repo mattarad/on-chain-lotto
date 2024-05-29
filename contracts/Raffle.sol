@@ -74,6 +74,7 @@ contract Raffle is VRFConsumerBaseV2 {
     /** Events */
     event EnteredRaffle(address indexed player);
     event PickedWinner(address indexed player);
+    event RequestedRaffleWinner(uint256 indexed requestId);
 
     constructor(
         uint256 entranceFee,
@@ -135,14 +136,16 @@ contract Raffle is VRFConsumerBaseV2 {
             );
         s_raffleState = RaffleState.CALCULATING;
 
-        /* uint256 requestId = */
-        i_vrfCoordinator.requestRandomWords(
+        uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
             REQUEST_CONFIRMATIONS,
             i_callBackGasLimit,
             NUM_WORDS
         );
+        // this event/emit is redundant since requestId is emitted
+        // by the VRFCoordinatorV2 contract
+        emit RequestedRaffleWinner(requestId);
     }
 
     function fulfillRandomWords(

@@ -2,9 +2,11 @@
 pragma solidity 0.8.24;
 
 import {Test, console} from "../../lib/forge-std/src/Test.sol";
+import {Vm} from "../../lib/forge-std/src/Vm.sol";
 import {Raffle} from "../../contracts/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
+import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol";
 
 contract RaffleTest is Test {
     Raffle raffle;
@@ -24,6 +26,15 @@ contract RaffleTest is Test {
     /** Events */
     event EnteredRaffle(address indexed player);
     event PickedWinner(address indexed player);
+
+    modifier raffleEnteredAndTimePassed() {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+        _;
+    }
 
     function setUp() external {
         DeployRaffle deployer = new DeployRaffle();
@@ -147,6 +158,33 @@ contract RaffleTest is Test {
             )
         );
         raffle.performUpkeep("");
+    }
+
+    function testPerformUpkeepUpdatesRaffleStateAndEmitsRequestId()
+        public
+        raffleEnteredAndTimePassed
+    {
+        // Arrange | Act | Assert
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+
+        Raffle.RaffleState rState = raffle.getRaffleState();
+
+        assert(uint256(requestId) > 0);
+        assert(rState == Raffle.RaffleState.CALCULATING);
+    }
+
+    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(
+        uint256 randomRequestId
+    ) public raffleEnteredAndTimePassed {
+        // Arrange | Act | Assert
+        vm.expectRevert("nonexistent request");
+        VRFCoordinatorV2Mock(vrfCoordinator).fulfillRandomWords(
+            randomRequestId,
+            address(raffle)
+        );
     }
 
     function testMultiplePlayersEnterRaffleGetPlayer() public {
