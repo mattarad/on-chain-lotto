@@ -77,4 +77,115 @@ contract RaffleTest is Test {
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
     }
+
+    function testCheckUpkeepReturnsFalseIfItHasNoBalance() public {
+        // Arrange | Act | Assert
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+
+        (bool upkeepNeeded, ) = raffle.checkUpkeep("");
+
+        assert(!upkeepNeeded);
+    }
+
+    function testCheckUpkeepReturnsFalseIfRaffleNotOpen() public {
+        // Arrange | Act | Assert
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+
+        raffle.performUpkeep("");
+        (bool upkeepNeeded, ) = raffle.checkUpkeep("");
+        assert(!upkeepNeeded);
+    }
+
+    function testCheckUpkeepReturnsFalseIfEnoughTimeHasntPassed() public {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + (interval / 2) + 1);
+
+        (bool upkeepNeeded, ) = raffle.checkUpkeep("");
+        console.log(upkeepNeeded);
+        assert(!upkeepNeeded);
+    }
+
+    function testCheckUpkeepReturnsTrueWhenParametersAreGood() public {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+
+        (bool upkeepNeeded, ) = raffle.checkUpkeep("");
+        console.log(upkeepNeeded);
+        assert(upkeepNeeded);
+    }
+
+    function testPerformUpkeepCanOnlyRunIfCheckUpkeepIsTrue() public {
+        // Arrange | Act | Assert
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+
+        raffle.performUpkeep("");
+    }
+
+    function testPerformUpkeepRevertsIfCheckUpkeepIsFalse() public {
+        // Arrange | Act | Assert
+        uint256 currentBalance = 0;
+        uint256 numPlayers = 0;
+        uint256 raffleState = 0;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Raffle.Raffle__UpkeepNotNeeded.selector,
+                currentBalance,
+                numPlayers,
+                raffleState
+            )
+        );
+        raffle.performUpkeep("");
+    }
+
+    function testMultiplePlayersEnterRaffleGetPlayer() public {
+        uint160 numPlayers = 25;
+        address[] memory players = _createPlayers(numPlayers);
+        for (uint160 i; i < numPlayers; i++) {
+            address indexedPlayer = raffle.getPlayer(i);
+            assert(indexedPlayer == players[i]);
+        }
+    }
+
+    function testMultiplePlayersEnterRaffleGetPlayersArray() public {
+        uint160 numPlayers = 25;
+        address[] memory players = _createPlayers(numPlayers);
+
+        address payable[] memory playersArray = raffle.getPlayersArray();
+        for (uint160 i; i < numPlayers; i++) {
+            assert(playersArray[i] == players[i]);
+        }
+    }
+
+    function testContractBalanceAfterMultipleEntrances() public {
+        uint160 numPlayers = 150;
+        _createPlayers(numPlayers);
+        uint256 numPlayersBal = uint256(numPlayers) * entranceFee;
+        console.log("numPlayersBal:             ", numPlayersBal);
+        console.log("address(raffle).balance:   ", address(raffle).balance);
+        assert(numPlayersBal == address(raffle).balance);
+    }
+
+    function _createPlayers(
+        uint160 numPlayers
+    ) internal returns (address[] memory) {
+        address[] memory players = new address[](numPlayers);
+        for (uint160 i; i < numPlayers; i++) {
+            hoax(address(i + 1), STARTING_BALANCE);
+            players[i] = address(i + 1);
+            raffle.enterRaffle{value: entranceFee}();
+        }
+        return players;
+    }
 }
